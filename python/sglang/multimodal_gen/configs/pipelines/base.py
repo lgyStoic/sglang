@@ -69,21 +69,21 @@ class PipelineConfig:
 
     # VAE configuration
     vae_config: VAEConfig = field(default_factory=VAEConfig)
-    vae_precision: str = "fp32"
+    vae_precision: str = "bf16"
     vae_tiling: bool = True
     vae_sp: bool = True
 
     # Image encoder configuration
     image_encoder_config: EncoderConfig = field(default_factory=EncoderConfig)
-    image_encoder_precision: str = "fp32"
+    image_encoder_precision: str = "bf16"
 
     # Text encoder configuration
-    DEFAULT_TEXT_ENCODER_PRECISIONS = ("fp32",)
+    DEFAULT_TEXT_ENCODER_PRECISIONS = ("bf16",)
     text_encoder_configs: tuple[EncoderConfig, ...] = field(
         default_factory=lambda: (EncoderConfig(),)
     )
     # See PRECISION_TO_TYPE for detailed mapping
-    text_encoder_precisions: tuple[str, ...] = field(default_factory=lambda: ("fp32",))
+    text_encoder_precisions: tuple[str, ...] = field(default_factory=lambda: ("bf16",))
     text_encoder_extra_args: list[dict] = field(default_factory=lambda: [{}])
 
     # image encoding

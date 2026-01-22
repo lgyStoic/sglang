@@ -14,6 +14,7 @@ from sglang.multimodal_gen.configs.pipelines.qwen_image import (
     QwenImageEditPipelineConfig,
     QwenImagePipelineConfig,
 )
+from sglang.multimodal_gen.configs.pipelines.flux import FluxPBRPipelineConfig
 from sglang.multimodal_gen.runtime.distributed import get_local_torch_device
 from sglang.multimodal_gen.runtime.loader.component_loader import VAELoader
 from sglang.multimodal_gen.runtime.models.vaes.common import ParallelTiledVAE
@@ -61,6 +62,21 @@ class DecodingStage(PipelineStage):
         # Decoded video/images: [batch_size, channels, frames, height, width]
         # result.add_check("output", batch.output, [V.is_tensor, V.with_dims(5)])
         return result
+    
+    def _unpack_latents(self, latents, height, width, vae_scale_factor):
+        batch_size, num_patches, channels = latents.shape
+
+        # VAE applies 8x compression on images but we must also account for packing which requires
+        # latent height and width to be divisible by 2.
+        height = 2 * (int(height) // (vae_scale_factor * 2))
+        width = 2 * (int(width) // (vae_scale_factor * 2))
+
+        latents = latents.view(batch_size, height // 2, width // 2, channels // 4, 2, 2)
+        latents = latents.permute(0, 3, 1, 4, 2, 5)
+
+        latents = latents.reshape(batch_size, channels // (2 * 2), height, width)
+
+        return latents
 
     def scale_and_shift(
         self, vae_arch_config: VAEArchConfig, latents: torch.Tensor, server_args
@@ -69,34 +85,43 @@ class DecodingStage(PipelineStage):
         is_qwen_image = isinstance(
             server_args.pipeline_config, QwenImagePipelineConfig
         ) or isinstance(server_args.pipeline_config, QwenImageEditPipelineConfig)
+        is_flux_conditioning = isinstance(
+            server_args.pipeline_config, FluxPBRPipelineConfig
+        )
         if is_qwen_image:
             scaling_factor = 1.0 / torch.tensor(
                 vae_arch_config.latents_std, device=latents.device
             ).view(1, vae_arch_config.z_dim, 1, 1, 1).to(latents.device, latents.dtype)
+        elif is_flux_conditioning:
+            latents = self._unpack_latents(latents, 1024, 1024, server_args.pipeline_config.vae_config.arch_config.vae_scale_factor)
+            latents = (
+                latents / self.vae.config.scaling_factor
+            ) + self.vae.config.shift_factor
+            scaling_factor = 1.0
         else:
             scaling_factor = vae_arch_config.scaling_factor
 
-        if isinstance(scaling_factor, torch.Tensor):
-            latents = latents / scaling_factor.to(latents.device, latents.dtype)
-        else:
-            latents = latents / scaling_factor
+        # if isinstance(scaling_factor, torch.Tensor):
+        #     latents = latents / scaling_factor.to(latents.device, latents.dtype)
+        # else:
+        #     latents = latents / scaling_factor
 
-        # 2. shift
-        if is_qwen_image:
-            shift_factor = (
-                torch.tensor(vae_arch_config.latents_mean)
-                .view(1, vae_arch_config.z_dim, 1, 1, 1)
-                .to(latents.device, latents.dtype)
-            )
-        else:
-            shift_factor = getattr(vae_arch_config, "shift_factor", None)
+        # # 2. shift
+        # if is_qwen_image:
+        #     shift_factor = (
+        #         torch.tensor(vae_arch_config.latents_mean)
+        #         .view(1, vae_arch_config.z_dim, 1, 1, 1)
+        #         .to(latents.device, latents.dtype)
+        #     )
+        # else:
+        #     shift_factor = getattr(vae_arch_config, "shift_factor", None)
 
-        # Apply shifting if needed
-        if shift_factor is not None:
-            if isinstance(shift_factor, torch.Tensor):
-                latents += shift_factor.to(latents.device, latents.dtype)
-            else:
-                latents += shift_factor
+        # # Apply shifting if needed
+        # if shift_factor is not None:
+        #     if isinstance(shift_factor, torch.Tensor):
+        #         latents += shift_factor.to(latents.device, latents.dtype)
+        #     else:
+        #         latents += shift_factor
         return latents
 
     @torch.no_grad()

@@ -4,7 +4,10 @@ from sglang.multimodal_gen.configs.pipelines.base import (
     PipelineConfig,
     SlidingTileAttnConfig,
 )
-from sglang.multimodal_gen.configs.pipelines.flux import FluxPipelineConfig
+from sglang.multimodal_gen.configs.pipelines.flux import (
+    FluxPipelineConfig,
+    FluxPBRPipelineConfig,
+)
 from sglang.multimodal_gen.configs.pipelines.hunyuan import (
     FastHunyuanConfig,
     HunyuanConfig,
@@ -22,6 +25,7 @@ __all__ = [
     "HunyuanConfig",
     "FastHunyuanConfig",
     "FluxPipelineConfig",
+    "FluxPBRPipelineConfig",
     "PipelineConfig",
     "SlidingTileAttnConfig",
     "WanT2V480PConfig",

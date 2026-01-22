@@ -89,6 +89,11 @@ class Req:
     # Image encoder hidden states
     image_embeds: list[torch.Tensor] = field(default_factory=list)
     pil_image: torch.Tensor | PIL.Image.Image | None = None
+
+    control_image: torch.Tensor | None = None
+    add_control_image: torch.Tensor | None = None
+    ref_image: torch.Tensor | None = None
+
     pixel_values: torch.Tensor | PIL.Image.Image | None = None
     preprocessed_image: torch.Tensor | None = None
 
@@ -129,7 +134,7 @@ class Req:
     raw_latent_shape: torch.Tensor | None = None
     noise_pred: torch.Tensor | None = None
     image_latent: torch.Tensor | None = None
-
+    image_ids: torch.Tensor | None = None
     # Latent dimensions
     height_latents: list[int] | int | None = None
     width_latents: list[int] | int | None = None
@@ -222,6 +227,8 @@ class Req:
         # Set do_classifier_free_guidance based on guidance scale and negative prompt
         if self.guidance_scale > 1.0 and self.negative_prompt is not None:
             self.do_classifier_free_guidance = True
+        self.do_classifier_free_guidance = False 
+        
         if self.negative_prompt_embeds is None:
             self.negative_prompt_embeds = []
         if self.guidance_scale_2 is None:

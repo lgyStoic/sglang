@@ -43,11 +43,11 @@ class ConditioningStage(PipelineStage):
         Returns:
             The batch with applied conditioning.
         """
-        # TODO!!
-        if not batch.do_classifier_free_guidance:
-            return batch
-        else:
-            return batch
+        # # TODO!!
+        # if not batch.do_classifier_free_guidance:
+        #     return batch
+        # else:
+        #     return batch
 
         logger.info("batch.negative_prompt_embeds: %s", batch.negative_prompt_embeds)
         logger.info(

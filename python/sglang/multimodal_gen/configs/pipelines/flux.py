@@ -172,3 +172,85 @@ class FluxPipelineConfig(PipelineConfig):
                 batch.neg_pooled_embeds[0] if batch.neg_pooled_embeds else None
             ),
         }
+
+@dataclass
+class FluxPBRPipelineConfig(FluxPipelineConfig):
+    def get_freqs_cis(self, prompt_embeds, width, height, device, rotary_emb, condition_latents_id):
+        txt_ids = torch.zeros(prompt_embeds.shape[1], 3, device=device)
+        img_ids = self._prepare_latent_image_ids(
+            original_height=height,
+            original_width=width,
+            device=device,
+        )
+        img_ids = torch.cat([img_ids, condition_latents_id], dim=0)
+        ids = torch.cat([txt_ids, img_ids], dim=0).to(device=device)
+        # NOTE(mick): prepare it here, to avoid unnecessary computations
+        freqs_cis = rotary_emb.forward(ids)
+        return freqs_cis
+
+    def prepare_pos_cond_kwargs(self, batch, device, rotary_emb, dtype):
+        return {
+            "freqs_cis": self.get_freqs_cis(
+                batch.prompt_embeds[1], batch.width, batch.height, device, rotary_emb, batch.condition_latents_id
+            ),
+            "pooled_projections": (
+                batch.pooled_embeds[0] if batch.pooled_embeds else None
+            ),
+        }
+
+    def prepare_neg_cond_kwargs(self, batch, device, rotary_emb, dtype):
+        return {
+            "freqs_cis": self.get_freqs_cis(
+                batch.negative_prompt_embeds[1],
+                batch.width,
+                batch.height,
+                device,
+                rotary_emb,
+                batch.condition_latents_id
+            ),
+            "pooled_projections": (
+                batch.neg_pooled_embeds[0] if batch.neg_pooled_embeds else None
+            ),
+        }
+
+    def _prepare_latent_image_ids(self, original_height, original_width, device):
+        vae_scale_factor = self.vae_config.arch_config.vae_scale_factor
+        height = int(original_height) // (vae_scale_factor * 2)
+        width = int(original_width) // (vae_scale_factor * 2)
+        latent_image_ids = torch.zeros(height, width, 3)
+        latent_image_ids[..., 1] = (
+            latent_image_ids[..., 1]
+            + torch.arange(0, height)[:, None]
+        )
+        latent_image_ids[..., 2] = (
+            latent_image_ids[..., 2] + torch.arange(0, width)[None, :]
+        )
+        latent_image_ids = latent_image_ids.reshape(height * width, 3).to(
+            device=device
+        )
+        return latent_image_ids
+
+    def prepare_latent_shape(self, batch, batch_size, num_frames):
+        height = 2 * (
+            batch.height // (self.vae_config.arch_config.vae_scale_factor * 2)
+        )
+        width = 2 * (batch.width // (self.vae_config.arch_config.vae_scale_factor * 2))
+        num_channels_latents = self.vae_config.arch_config.latent_channels
+        shape = (batch_size, num_channels_latents, height, width)
+        return shape
+
+    def pack_latents(self, latents, batch_size, batch):
+        height = 2 * (
+            batch.height // (self.vae_config.arch_config.vae_scale_factor * 2)
+        )
+        width = 2 * (batch.width // (self.vae_config.arch_config.vae_scale_factor * 2))
+        num_channels_latents = self.vae_config.arch_config.latent_channels
+        latents = latents.view(
+            batch_size, num_channels_latents, height // 2, 2, width // 2, 2
+        )
+        latents = latents.permute(0, 2, 4, 1, 3, 5)
+        latents = latents.reshape(
+            batch_size, (height // 2) * (width // 2), num_channels_latents * 4
+        )
+        return latents
+

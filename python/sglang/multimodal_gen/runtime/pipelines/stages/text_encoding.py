@@ -10,7 +10,7 @@ This module contains implementations of prompt encoding stages for diffusion pip
 import torch
 
 from sglang.multimodal_gen.configs.models.encoders import BaseEncoderOutput
-from sglang.multimodal_gen.configs.pipelines import FluxPipelineConfig
+from sglang.multimodal_gen.configs.pipelines import FluxPipelineConfig, FluxPBRPipelineConfig
 from sglang.multimodal_gen.runtime.distributed import get_local_torch_device
 from sglang.multimodal_gen.runtime.managers.forward_context import set_forward_context
 from sglang.multimodal_gen.runtime.pipelines.schedule_batch import Req
@@ -68,13 +68,20 @@ class TextEncodingStage(PipelineStage):
         prompt_text: str | list[str] = batch.prompt
 
         all_indices: list[int] = list(range(len(self.text_encoders)))
-
-        prompt_embeds_list, prompt_masks_list, pooler_embeds_list = self.encode_text(
-            prompt_text,
-            server_args,
-            encoder_index=all_indices,
-            return_attention_mask=True,
-        )
+        if isinstance(server_args.pipeline_config, FluxPBRPipelineConfig):
+            prompt_embeds_list, prompt_masks_list, pooler_embeds_list = self.encode_text(
+                prompt_text,
+                server_args,
+                encoder_index=all_indices,
+                return_attention_mask=True,
+            )
+        else:
+            prompt_embeds_list, prompt_masks_list, pooler_embeds_list = self.encode_text(
+                prompt_text,
+                server_args,
+                encoder_index=all_indices,
+                return_attention_mask=True,
+            )
 
         for pe in prompt_embeds_list:
             batch.prompt_embeds.append(pe)
@@ -132,6 +139,14 @@ class TextEncodingStage(PipelineStage):
         tok_kwargs = tokenizer_kwargs | kwargs
 
         return tok_kwargs
+
+    @torch.no_grad()
+    def encode_pbr_text(self, text: str | list[str], server_args: ServerArgs, encoder_index: int | list[int] | None = None, return_attention_mask: bool = False, return_type: str = "list", device: torch.device | str | None = None, dtype: torch.dtype | None = None, max_length: int | None = None, truncation: bool | None = None, padding: bool | str | None = None, return_overflowing_tokens=None, return_length=None):
+        """
+        Encode text for PBR pipeline.
+        """
+        pass
+        
 
     @torch.no_grad()
     def encode_text(
@@ -249,7 +264,7 @@ class TextEncodingStage(PipelineStage):
 
             text_inputs = tokenizer(processed_texts, **tok_kwargs).to(target_device)
             input_ids = text_inputs["input_ids"]
-            is_flux = isinstance(server_args.pipeline_config, FluxPipelineConfig)
+            is_flux = isinstance(server_args.pipeline_config, FluxPipelineConfig) or isinstance(server_args.pipeline_config, FluxPBRPipelineConfig)
             is_flux_t5 = is_flux and i == 1
 
             if is_flux_t5:

@@ -88,6 +88,21 @@ except ImportError:
 
 logger = init_logger(__name__)
 
+import sys
+import pdb
+
+class ForkedPdb(pdb.Pdb):
+    """A Pdb subclass that may be used
+    from a forked multiprocessing child
+
+    """
+    def interaction(self, *args, **kwargs):
+        _stdin = sys.stdin
+        try:
+            sys.stdin = open('/dev/stdin')
+            pdb.Pdb.interaction(self, *args, **kwargs)
+        finally:
+            sys.stdin = _stdin
 
 class DenoisingStage(PipelineStage):
     """
@@ -111,9 +126,9 @@ class DenoisingStage(PipelineStage):
         attn_head_size = hidden_size // num_attention_heads
 
         # torch compile
-        if self.server_args.enable_torch_compile:
-            full_graph = False
-            self.transformer = torch.compile(
+        if True:
+            full_graph = True
+            self.transformer.forward = torch.compile(
                 self.transformer, mode="max-autotune", fullgraph=full_graph
             )
             self.transformer_2 = (
@@ -130,7 +145,7 @@ class DenoisingStage(PipelineStage):
 
         self.attn_backend = get_attn_backend(
             head_size=attn_head_size,
-            dtype=torch.float16,  # TODO(will): hack
+            dtype=torch.bfloat16,  # TODO(will): hack
             supported_attention_backends={
                 AttentionBackendEnum.SLIDING_TILE_ATTN,
                 AttentionBackendEnum.VIDEO_SPARSE_ATTN,
@@ -851,6 +866,7 @@ class DenoisingStage(PipelineStage):
                         guidance=guidance,
                         latents=latents,
                     )
+                    latents = latent_model_input
 
                     if batch.perf_logger:
                         batch.perf_logger.record_step_end("denoising_step_guided", i)
@@ -862,15 +878,17 @@ class DenoisingStage(PipelineStage):
                         **extra_step_kwargs,
                         return_dict=False,
                     )[0]
+                    if batch.image_latent is not None:
+                        latents = latents[:, :-batch.image_latent.shape[1]]
 
-                    latents = self.post_forward_for_ti2v_task(
-                        batch, server_args, reserved_frames_mask, latents, z
-                    )
+                    # latents = self.post_forward_for_ti2v_task(
+                    #     batch, server_args, reserved_frames_mask, latents, z
+                    # )
 
-                    # save trajectory latents if needed
-                    if batch.return_trajectory_latents:
-                        trajectory_timesteps.append(t_host)
-                        trajectory_latents.append(latents)
+                    # # save trajectory latents if needed
+                    # if batch.return_trajectory_latents:
+                    #     trajectory_timesteps.append(t_host)
+                    #     trajectory_latents.append(latents)
 
                     # Update progress bar
                     if i == num_timesteps - 1 or (
@@ -891,14 +909,15 @@ class DenoisingStage(PipelineStage):
                 "Average time per step: %.4f seconds",
                 (denoising_end_time - denoising_start_time) / len(timesteps),
             )
+        batch.latents = latents
 
-        self._post_denoising_loop(
-            batch=batch,
-            latents=latents,
-            trajectory_latents=trajectory_latents,
-            trajectory_timesteps=trajectory_timesteps,
-            server_args=server_args,
-        )
+        # self._post_denoising_loop(
+        #     batch=batch,
+        #     latents=latents,
+        #     trajectory_latents=trajectory_latents,
+        #     trajectory_timesteps=trajectory_timesteps,
+        #     server_args=server_args,
+        # )
         return batch
 
     # TODO: this will extends the preparation stage, should let subclass/passed-in variables decide which to prepare

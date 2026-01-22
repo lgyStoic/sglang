@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 from sglang.multimodal_gen.configs.pipelines import (
     FastHunyuanConfig,
     FluxPipelineConfig,
+    FluxPBRPipelineConfig,
     HunyuanConfig,
     StepVideoT2VConfig,
     WanI2V480PConfig,
@@ -36,6 +37,7 @@ from sglang.multimodal_gen.configs.pipelines.wan import (
     Wan2_2_TI2V_5B_Config,
 )
 from sglang.multimodal_gen.configs.sample.flux import FluxSamplingParams
+from sglang.multimodal_gen.configs.sample.flux_pbr import FluxPBRSamplingParams
 from sglang.multimodal_gen.configs.sample.hunyuan import (
     FastHunyuanSamplingParam,
     HunyuanSamplingParams,
@@ -402,6 +404,16 @@ def _register_configs():
         model_name_detectors=[("flux", lambda id: "flux" in id.lower())],
     )
 
+    # FLUXPBR
+    register_configs(
+        model_name="fluxpbr",
+        sampling_param_cls=FluxPBRSamplingParams,
+        pipeline_config_cls=FluxPBRPipelineConfig,
+        model_path_to_name_mappings={
+            "/storage/home/gaoyuan/workspace/flux_lora/fused_flux_lora": "fluxpbr",
+        },
+        model_name_detectors=[("fluxpbr", lambda id: "fluxpbr" in id.lower())],
+    )
     # Qwen-Image
     register_configs(
         model_name="qwen-image",

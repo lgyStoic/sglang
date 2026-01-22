@@ -40,6 +40,9 @@ from sglang.multimodal_gen.runtime.pipelines.stages.text_encoding import (
 from sglang.multimodal_gen.runtime.pipelines.stages.timestep_preparation import (
     TimestepPreparationStage,
 )
+from sglang.multimodal_gen.runtime.pipelines.stages.fluxpbr_imagencoding import (
+    FluxPBRVAEEncodingStage,
+)
 
 __all__ = [
     "PipelineStage",
@@ -56,4 +59,5 @@ __all__ = [
     "ImageVAEEncodingStage",
     "TextEncodingStage",
     "StepvideoPromptEncodingStage",
+    "FluxPBRVAEEncodingStage",
 ]
